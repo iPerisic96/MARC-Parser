@@ -1,7 +1,7 @@
 {
-"leader": "000888cam a2200253u 4500",
 "records":
-[{
+["leader": "000888cam a2200253u 4500",
+{
 	"fields": 
 		[
 			{

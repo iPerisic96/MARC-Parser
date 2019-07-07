@@ -1,11 +1,11 @@
 import Text.Parsec
 import System.Environment
 
-data Document = Document Leader [Record]
+data Document = Document [Record]
 
 data Leader = Leader Code Value
 
-data Record = Record [Field]
+data Record = Record Leader [Field]
 
 data Field = ControlField Code Value | DataField Code Indicator1 Indicator2 [Subfield]
 
@@ -18,9 +18,8 @@ type Value = String
 type CodeC = Char
                                     
 instance Show Document where
-    show (Document leader records) =
+    show (Document records) =
                         "{\n" ++
-                        "\"leader\": " ++ (show leader) ++ ",\n" ++
                         "\"records\":\n" ++ (show records) ++
                         "\n}"
 
@@ -29,10 +28,10 @@ instance Show Leader where
 
 
 instance Show Record where
-    show (Record fields) = "{\n" ++ 
+    show (Record leader fields) =  "{\"leader\": " ++ (show leader) ++ ",\n" ++
                             insertTabs 1 ++ "\"fields\": \n" ++ 
-                            insertTabs 2 ++ (show fields) ++ 
-                            insertTabs 1 ++ "}\n"
+                            insertTabs 2 ++ (show fields) ++ "\n" ++
+                            insertTabs 1 ++ "}" 
 
 instance Show Field where
     show (ControlField code value) = "\n" ++ --[ iz show fields '[', zato new line
@@ -58,10 +57,11 @@ insertTabs c = "\t" ++ insertTabs (c - 1)
 
 document :: Parsec String Int Document
 document = do 
-              leader <- try leader <|> return (Leader "" "")
+              --
               records <- many1 record
+             -- try (many document)
               eof
-              return (Document leader records)
+              return (Document records)
 
 leader :: Parsec String Int Leader
 leader = do 
@@ -73,53 +73,57 @@ leader = do
             
 record :: Parsec String Int Record
 record = do 
+            leader <- try leader <|> return (Leader "" "")
             fields <- many1 (try field)
             spaces
-            return (Record fields)
+            return (Record leader fields)
 
 field :: Parsec String Int Field
 field = do 
             spaces
             code <- count 3 digit
-            --indicator <- lookAhead (anyChar)--
-           -- indicators <- many (noneOf "\n ")--
-            indicators <- try (indicators1) <|> try (indicators2) <|> try (indicators3) <|> return (take 2 (repeat '\0'))
-            
-            {--if (length indicators < 3 && length indicators > 0) then do -- 010 ## $a92005291 // DataField--         
-                space 
-                subfields <- many1 subfield 
-                return (DataField code (indicators !! 0) (indicators !! 1) subfields)
-            else do
-                spaces
-                value <- many (noneOf "\n")
-                spaces
-                return (ControlField code (indicators ++ value))
-                --}
-            
-            if (length indicators <= 0) then do
-                subfields <- many1 subfield 
-                return (DataField code ('\0') ('\0') subfields)
-            else do
-                if (indicators !! 0 == '\0') then do
-                    spaces 
-                    value <- many (noneOf "\n")
-                    return (ControlField code value)
-                else do
-                   {--subfields <- many1 subfield
-                    field5Code <- lookAhead anyChar
-                    if (field5Code == '\RS') then do
-                        field5Code <- char '\RS'
-                        return (DataField code (indicators !! 0) (indicators !! 1) subfields)
-                    else do --}
-                    field5Code <- lookAhead anyChar
-                    if (field5Code == '\US') then do
-                        subfields <- many1 subfield
-                        many (char '\RS') 
-                        return (DataField code (indicators !! 0) (indicators !! 1) subfields)    
-                    else do
-                        subfields <- many1 subfield 
-                        return (DataField code (indicators !! 0) (indicators !! 1) subfields)
+            if (code == "000") then do
+                fail "Leader"
+            else do 
+                --indicator <- lookAhead (anyChar)--
+               -- indicators <- many (noneOf "\n ")--
+                indicators <- try (indicators1) <|> try (indicators2) <|> try (indicators3) <|> return (take 2 (repeat '\0'))
                 
+                {--if (length indicators < 3 && length indicators > 0) then do -- 010 ## $a92005291 // DataField--         
+                    space 
+                    subfields <- many1 subfield 
+                    return (DataField code (indicators !! 0) (indicators !! 1) subfields)
+                else do
+                    spaces
+                    value <- many (noneOf "\n")
+                    spaces
+                    return (ControlField code (indicators ++ value))
+                    --}
+                
+                if (length indicators <= 0) then do
+                    subfields <- many1 subfield 
+                    return (DataField code ('\0') ('\0') subfields)
+                else do
+                    if (indicators !! 0 == '\0') then do
+                        spaces 
+                        value <- many (noneOf "\n")
+                        return (ControlField code value)
+                    else do
+                       {--subfields <- many1 subfield
+                        field5Code <- lookAhead anyChar
+                        if (field5Code == '\RS') then do
+                            field5Code <- char '\RS'
+                            return (DataField code (indicators !! 0) (indicators !! 1) subfields)
+                        else do --}
+                        field5Code <- lookAhead anyChar
+                        if (field5Code == '\US') then do
+                            subfields <- many1 subfield
+                            many (char '\RS') 
+                            return (DataField code (indicators !! 0) (indicators !! 1) subfields)    
+                        else do
+                            subfields <- many1 subfield 
+                            return (DataField code (indicators !! 0) (indicators !! 1) subfields)
+                    
 indicators1 :: Parsec String Int [Char]  
 indicators1 = do 
                 space
@@ -174,4 +178,9 @@ main = do
         case (runParser document 0 input cont) of
             Left err -> putStrLn . show $ err
             Right rss -> writeFile output . show $ rss
-
+{-- The most general way to run a parser over the Identity monad. 
+runParser p state filePath input runs parser p on the input list of tokens input,
+ obtained from source filePath with the initial user state st. The filePath is
+ only used in error messages and may be the empty string. Returns either 
+ a ParseError (Left) or a value of type a (Right).
+--}
